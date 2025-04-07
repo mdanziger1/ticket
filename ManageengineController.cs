@@ -20,6 +20,7 @@ using Aspose.Pdf.Operators;
 using DevExpress.Pdf.ContentGeneration.Interop;
 using AdminPortal.Models;
 using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Http;
 namespace AdminPortal.Controllers
 {
     [Authorize]
@@ -55,8 +56,6 @@ namespace AdminPortal.Controllers
 
             Console.WriteLine(token);
             
-            
-
             if (tokenData.ExpirationTime < DateTime.Now)
             {
                 token = await RefreshToken();
@@ -68,34 +67,31 @@ namespace AdminPortal.Controllers
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.manageengine.sdp.v3+json"));
             client.DefaultRequestHeaders.Add("Authorization", "Zoho-Oauthtoken " + token);
 
-            //var attachments = data.Attachments.Any() ? data.Attachments.Select((attachment, index) =>
-            //{
-            //    return $@"{{
-            //                file_id: {attachment}
-            //            }}";
-            //}).ToList() : new List<string>();
 
-            //var attachmentsString = attachments.Any() ? string.Join(",", attachments) : "";
-            
-            var content = new FormUrlEncodedContent(new[]
+            var requestObject = new
             {
-                new KeyValuePair<string, string>("input_data", $@"{{
-                    request: {{
-                        category: {{
-                            name: {JsonConvert.SerializeObject(data.Category)} 
-                        }},
-                        description: {JsonConvert.SerializeObject(data.Description)},
+                request = new Dictionary<string, object>
+                {
+                    ["category"] = new { name = data.Category },
+                    ["description"] = data.Description,
+                    ["requester"] = new { email_id = data.User },
+                    ["priority"] = new { name = data.Priority },
+                    ["subject"] = data.Subject
+                }
+            };
 
-                        requester: {{
-                            email_id:  {data.User}
-                        }},
-                         priority: {{
-                            name: {JsonConvert.SerializeObject(data.Priority)} 
-                        }},
-                        subject: {JsonConvert.SerializeObject(data.Subject)}
-                    }}
-                }}")
-            });
+            if (!string.IsNullOrEmpty(data.Attachments))
+            {
+                requestObject.request["attachments"] = new[]
+                {new { file_id = data.Attachments } };
+            }
+
+            string jsonString = JsonConvert.SerializeObject(requestObject);
+
+            var content = new FormUrlEncodedContent(new[]
+              {new KeyValuePair<string, string>("input_data", jsonString) }
+            );
+
 
             content.Headers.ContentType = new MediaTypeHeaderValue("application/x-www-form-urlencoded");
 
@@ -116,6 +112,53 @@ namespace AdminPortal.Controllers
                 return BadRequest(new Exception("Request error: " + e.Message));
             }
         }
+
+        [HttpPost]
+        [AllowAnonymous]
+        public async Task<ActionResult> ManageengineUpload([FromForm] IFormFile file)
+        {
+            Console.WriteLine("Hello from post files");
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest("No file uploaded.");
+            }
+
+            var tokenData = azurePayments.Tokens.First(t => t.Source == "Manageengine");
+            var token = tokenData.Token1;
+
+            if (tokenData.ExpirationTime < DateTime.Now)
+            {
+                token = await RefreshToken();
+            }
+
+            using var client = new HttpClient();
+            var url = "https://utaw.sdpondemand.manageengine.com/app/itdesk/api/v3/requests/uploads";
+
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.manageengine.v3+json"));
+            client.DefaultRequestHeaders.Add("Authorization", "Zoho-Oauthtoken " + token);
+
+            using var content = new MultipartFormDataContent();
+            await using var fileStream = file.OpenReadStream();
+            var fileContent = new StreamContent(fileStream);
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(file.ContentType);
+
+            content.Add(fileContent, "filename", file.FileName);
+
+            try
+            {
+                var response = await client.PostAsync(url, content);
+                response.EnsureSuccessStatusCode();
+                var responseBody = await response.Content.ReadAsStringAsync();
+
+                return Ok(JsonConvert.DeserializeObject<object>(responseBody));
+            }
+            catch (HttpRequestException e)
+            {
+                return BadRequest(new { error = "Request error: " + e.Message });
+            }
+        }
+
+
 
         [HttpGet]
         public async Task<ActionResult> GetbyID(int id)

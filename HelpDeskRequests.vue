@@ -63,6 +63,16 @@
                                         :rules="[rules.required]"
                                     ></v-Textarea>
                                 </v-flex>
+                                <v-btn
+                                    small
+                                    outline
+                                    class="mr-2"
+                                    :loading="uploading"
+                                    @click="pickFile()"
+                                >
+                                    Upload
+                                    <v-icon right dark>mdi-cloud-upload</v-icon>
+                                </v-btn>
                             </v-layout>
                         </v-container>
                     </v-form>
@@ -83,6 +93,12 @@
                             :disabled="false"
                             >Send</v-btn
                         >
+                        <input
+                            type="file"
+                            style="display: none"
+                            ref="files"
+                            @change="onFilePicked($event)"
+                        />
                     </v-card-actions>
                 </v-card>
             </v-dialog>
@@ -102,6 +118,8 @@ export default {
         actions: [],
         newTicketDialog: false,
         processing: false,
+        uploading: false,
+        fileUploadId: "",
 
         newTicket: {
             subject: "",
@@ -300,7 +318,7 @@ export default {
                         Description: this.newTicket.description,
                         Priority: this.newTicket.priority,
                         Category: this.newTicket.category,
-                        // Attachments: `[{"file_id": "17430006"}]`,
+                        Attachments: this.fileUploadId,
                     },
                 );
 
@@ -330,6 +348,36 @@ export default {
             this.newTicket.description = "";
             this.newTicket.category = "";
             this.newTicket.priority = "2 Normal";
+            this.fileUploadId = "";
+        },
+        pickFile() {
+            this.$refs.files.click();
+        },
+        async onFilePicked(e) {
+            this.uploading = true;
+
+            const files = e.target.files;
+
+            if (!files) return;
+
+            try {
+                var formData = new FormData();
+                formData.append("file", files[0]);
+
+                const response = await this.$http.post(
+                    "api/Manageengine/ManageengineUpload",
+                    formData,
+                    {
+                        headers: {
+                            "Content-Type": "multipart/form-data",
+                        },
+                    },
+                );
+                this.fileUploadId = response.files[0].file_id;
+                this.uploading = false;
+            } catch (e) {
+                this.uploading = false;
+            }
         },
     },
 };
