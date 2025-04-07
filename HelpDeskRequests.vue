@@ -33,17 +33,14 @@
                                     <v-select
                                         v-model="newTicket.category"
                                         :items="[
-                                            'General',
                                             'Telephone',
                                             'Desktop / Laptop /Server',
                                             'Printers / scanner / Fax',
-                                            'FAX',
                                             'Software',
                                             'Camera',
                                         ]"
                                         label="Category"
                                         ref="newTicketCategory"
-                                        :rules="[rules.required]"
                                     ></v-select>
                                 </v-flex>
                                 <v-flex xs12>
@@ -57,22 +54,55 @@
                                 <v-flex xs12>
                                     <v-Textarea
                                         v-model="newTicket.description"
-                                        label="Description*"
+                                        label="Description"
                                         outline
                                         ref="newTicketDescription"
-                                        :rules="[rules.required]"
                                     ></v-Textarea>
                                 </v-flex>
+
                                 <v-btn
+                                    v-if="!fileUploaded"
                                     small
-                                    outline
-                                    class="mr-2"
+                                    class="ml-0"
+                                    color="success"
                                     :loading="uploading"
                                     @click="pickFile()"
+                                    >Upload Attachment</v-btn
                                 >
-                                    Upload
-                                    <v-icon right dark>mdi-cloud-upload</v-icon>
-                                </v-btn>
+
+                                <v-layout>
+                                    <div
+                                        style="border: 1px solid #4caf50; border-radius: 5px;"
+                                        class="pa-2 my-3"
+                                        v-if="fileUploadName.length"
+                                    >
+                                        <v-layout
+                                            row
+                                            justify-space-between
+                                            style="width: 350px;"
+                                        >
+                                            <div class="mt-0 ml-0 pt-1">
+                                                {{
+                                                    truncateText(
+                                                        fileUploadName,
+                                                        27,
+                                                    )
+                                                }}
+                                            </div>
+                                            <v-spacer></v-spacer>
+                                            <v-btn
+                                                :loading="processing"
+                                                color="success"
+                                                class="my-0 mr-1"
+                                                small
+                                                outline
+                                                @click="removeUploadImg()"
+                                            >
+                                                remove
+                                            </v-btn>
+                                        </v-layout>
+                                    </div>
+                                </v-layout>
                             </v-layout>
                         </v-container>
                     </v-form>
@@ -90,7 +120,8 @@
                             dark
                             color="success"
                             @click="saveNewTicket"
-                            :disabled="false"
+                            :dark="!sendBtnDisability"
+                            :disabled="sendBtnDisability"
                             >Send</v-btn
                         >
                         <input
@@ -109,10 +140,11 @@
 <script>
 import moment from "moment";
 import { formatCurrency } from "../../utils/helpers.js";
-
+import { truncate } from "../../utils/helpers.js";
 export default {
     data: () => ({
         cencelBtnAbility: false,
+        sendBtnDisability: false,
         title: "Help Desk Requests",
         url: "",
         actions: [],
@@ -120,6 +152,8 @@ export default {
         processing: false,
         uploading: false,
         fileUploadId: "",
+        fileUploaded: false,
+        fileUploadName: "",
 
         newTicket: {
             subject: "",
@@ -317,7 +351,9 @@ export default {
                         Subject: this.newTicket.subject,
                         Description: this.newTicket.description,
                         Priority: this.newTicket.priority,
-                        Category: this.newTicket.category,
+                        Category: this.newTicket.category
+                            ? this.newTicket.category
+                            : "User Portal",
                         Attachments: this.fileUploadId,
                     },
                 );
@@ -340,24 +376,23 @@ export default {
             }
         },
         cencelNewTicket() {
-            this.newTicketDialog = false;
             this.reset();
         },
         reset() {
+            this.newTicketDialog = false;
             this.newTicket.subject = "";
             this.newTicket.description = "";
             this.newTicket.category = "";
             this.newTicket.priority = "2 Normal";
-            this.fileUploadId = "";
+            this.removeUploadImg();
         },
         pickFile() {
             this.$refs.files.click();
         },
         async onFilePicked(e) {
             this.uploading = true;
-
+            this.sendBtnDisability = true;
             const files = e.target.files;
-
             if (!files) return;
 
             try {
@@ -374,10 +409,25 @@ export default {
                     },
                 );
                 this.fileUploadId = response.files[0].file_id;
+                this.fileUploadName = response.files[0].name;
+                this.fileUploaded = true;
                 this.uploading = false;
+                this.sendBtnDisability = false;
+                this.$refs.files.value = null;
             } catch (e) {
                 this.uploading = false;
             }
+        },
+        removeUploadImg() {
+            this.fileUploadId = "";
+            this.fileUploaded = false;
+            this.fileUploadName = "";
+            this.uploading = false;
+            this.sendBtnDisability = false;
+            this.$refs.files.value = null;
+        },
+        truncateText(text, count = 25) {
+            return truncate(text, count);
         },
     },
 };
