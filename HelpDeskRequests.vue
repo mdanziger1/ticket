@@ -43,6 +43,26 @@
                                         ref="newTicketCategory"
                                     ></v-select>
                                 </v-flex>
+                                <v-flex xs18 sm5>
+                                    <v-text-field
+                                        v-model="newTicket.phone"
+                                        label="Phone Number"
+                                        type="Number"
+                                    ></v-text-field>
+                                </v-flex>
+                                <v-flex xs18 sm3>
+                                    <v-text-field
+                                        v-model="newTicket.room"
+                                        label="Room Number"
+                                    ></v-text-field>
+                                </v-flex>
+                                <v-flex xs18 sm3>
+                                    <v-text-field
+                                        v-model="newTicket.ext"
+                                        label="Ext Number"
+                                    ></v-text-field>
+                                </v-flex>
+
                                 <v-flex xs12>
                                     <v-text-field
                                         v-model="newTicket.subject"
@@ -63,46 +83,38 @@
                                 <v-btn
                                     v-if="!fileUploaded"
                                     small
-                                    class="ml-0"
+                                    class="ml-0 mt-0"
                                     color="success"
                                     :loading="uploading"
                                     @click="pickFile()"
                                     >Upload Attachment</v-btn
                                 >
 
-                                <v-layout>
-                                    <div
-                                        style="border: 1px solid #4caf50; border-radius: 5px;"
-                                        class="pa-2 my-3"
-                                        v-if="fileUploadName.length"
+                                <div
+                                    style="border: 1px solid #4caf50; border-radius: 5px;"
+                                    class="pa-2 my-3"
+                                    v-if="fileUploadName.length"
+                                >
+                                    <v-layout
+                                        row
+                                        justify-space-between
+                                        style="width: 350px;"
                                     >
-                                        <v-layout
-                                            row
-                                            justify-space-between
-                                            style="width: 350px;"
+                                        <div class="mt-0 ml-0 pt-1">
+                                            {{
+                                                truncateText(fileUploadName, 27)
+                                            }}
+                                        </div>
+                                        <v-btn
+                                            color="success"
+                                            class="my-0 mr-1"
+                                            small
+                                            @click="removeUploadImg()"
                                         >
-                                            <div class="mt-0 ml-0 pt-1">
-                                                {{
-                                                    truncateText(
-                                                        fileUploadName,
-                                                        27,
-                                                    )
-                                                }}
-                                            </div>
-                                            <v-spacer></v-spacer>
-                                            <v-btn
-                                                :loading="processing"
-                                                color="success"
-                                                class="my-0 mr-1"
-                                                small
-                                                outline
-                                                @click="removeUploadImg()"
-                                            >
-                                                remove
-                                            </v-btn>
-                                        </v-layout>
-                                    </div>
-                                </v-layout>
+                                            remove
+                                        </v-btn>
+                                    </v-layout>
+                                </div>
                             </v-layout>
                         </v-container>
                     </v-form>
@@ -160,6 +172,9 @@ export default {
             description: "",
             category: "",
             priority: "2 Normal",
+            phone: "",
+            room: "",
+            ext: "",
         },
 
         rules: {
@@ -343,13 +358,35 @@ export default {
             try {
                 this.processing = true;
                 this.cencelBtnAbility = true;
+                const hasUserInfo =
+                    this.newTicket.phone ||
+                    this.newTicket.room.trim() ||
+                    this.newTicket.ext.trim();
+
+                const userInfo = [
+                    this.newTicket.phone
+                        ? ` Phone = ${this.newTicket.phone}`
+                        : "",
+                    this.newTicket.room.trim()
+                        ? ` Room = ${this.newTicket.room.trim()}`
+                        : "",
+                    this.newTicket.ext.trim()
+                        ? ` Ext = ${this.newTicket.ext.trim()} `
+                        : "",
+                ]
+                    .filter(Boolean)
+                    .join(", ");
+
+                const description = `${this.newTicket.description.trim()}${
+                    hasUserInfo ? ` (User Info: ${userInfo})` : ""
+                }`;
 
                 const response = await this.$http.post(
                     "api/Manageengine/ManageenginePost",
                     {
                         User: this.$store.state.authentication.user,
-                        Subject: this.newTicket.subject,
-                        Description: this.newTicket.description,
+                        Subject: this.newTicket.subject.trim(),
+                        Description: description,
                         Priority: this.newTicket.priority,
                         Category: this.newTicket.category
                             ? this.newTicket.category
@@ -359,7 +396,6 @@ export default {
                 );
 
                 this.processing = false;
-                this.newTicketDialog = false;
                 this.cencelBtnAbility = false;
 
                 this.$notify({
@@ -384,6 +420,9 @@ export default {
             this.newTicket.description = "";
             this.newTicket.category = "";
             this.newTicket.priority = "2 Normal";
+            this.newTicket.phone = "";
+            this.newTicket.room = "";
+            this.newTicket.ext = "";
             this.removeUploadImg();
         },
         pickFile() {
