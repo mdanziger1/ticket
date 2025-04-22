@@ -53,8 +53,6 @@ namespace AdminPortal.Controllers
         {
             var tokenData = azurePayments.Tokens.First(t => t.Source == "Manageengine");
             var token = tokenData.Token1;
-
-            Console.WriteLine(token);
             
             if (tokenData.ExpirationTime < DateTime.Now)
             {
@@ -66,7 +64,6 @@ namespace AdminPortal.Controllers
 
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.manageengine.sdp.v3+json"));
             client.DefaultRequestHeaders.Add("Authorization", "Zoho-Oauthtoken " + token);
-
 
             var requestObject = new
             {
@@ -82,8 +79,10 @@ namespace AdminPortal.Controllers
 
             if (!string.IsNullOrEmpty(data.Attachments))
             {
-                requestObject.request["attachments"] = new[]
-                {new { file_id = data.Attachments } };
+                var attachments = JsonConvert.DeserializeObject<List<string>>(data.Attachments);
+                var attachmentArray = attachments.Select(id => new Dictionary<string, object> { { "file_id", id } }).ToArray();
+
+                requestObject.request["attachments"] = attachmentArray;
             }
 
             string jsonString = JsonConvert.SerializeObject(requestObject);
@@ -116,8 +115,7 @@ namespace AdminPortal.Controllers
         [HttpPost]
         [AllowAnonymous]
         public async Task<ActionResult> ManageengineUpload([FromForm] IFormFile file)
-        {
-            Console.WriteLine("Hello from post files");
+        {    
             if (file == null || file.Length == 0)
             {
                 return BadRequest("No file uploaded.");

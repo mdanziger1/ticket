@@ -23,7 +23,7 @@
                                 <v-flex xs12 sm6>
                                     <v-select
                                         v-model="newTicket.priority"
-                                        :items="['1 High', '2 Normal', '4 Low']"
+                                        :items="['High', 'Normal', 'Low']"
                                         label="Priority"
                                         ref="newTicketSelectedPriority"
                                         :rules="[rules.required]"
@@ -43,11 +43,34 @@
                                         ref="newTicketCategory"
                                     ></v-select>
                                 </v-flex>
+
+                                <v-flex xs12>
+                                    <v-text-field
+                                        v-model="newTicket.subject"
+                                        label="Enter a brief title for your request"
+                                        ref="newTicketSubject"
+                                        :rules="[rules.required]"
+                                    ></v-text-field>
+                                </v-flex>
+                                <v-flex xs12>
+                                    <v-Textarea
+                                        v-model="newTicket.description"
+                                        label="Write a message"
+                                        outline
+                                        ref="newTicketDescription"
+                                    ></v-Textarea>
+                                </v-flex>
+
+                                <v-flex xs12>
+                                    <span
+                                        >This information is optional but
+                                        recommended:</span
+                                    >
+                                </v-flex>
                                 <v-flex xs18 sm5>
                                     <v-text-field
                                         v-model="newTicket.phone"
                                         label="Phone Number"
-                                        type="Number"
                                     ></v-text-field>
                                 </v-flex>
                                 <v-flex xs18 sm3>
@@ -62,59 +85,39 @@
                                         label="Ext Number"
                                     ></v-text-field>
                                 </v-flex>
-
-                                <v-flex xs12>
-                                    <v-text-field
-                                        v-model="newTicket.subject"
-                                        label="Subject*"
-                                        ref="newTicketSubject"
-                                        :rules="[rules.required]"
-                                    ></v-text-field>
+                                <v-flex xs18 sm8>
+                                    <v-btn
+                                        small
+                                        class="ml-0 mt-0"
+                                        color="success"
+                                        :loading="uploading"
+                                        @click="pickFile()"
+                                        >Upload Attachment</v-btn
+                                    >
                                 </v-flex>
-                                <v-flex xs12>
-                                    <v-Textarea
-                                        v-model="newTicket.description"
-                                        label="Description"
-                                        outline
-                                        ref="newTicketDescription"
-                                    ></v-Textarea>
-                                </v-flex>
-
-                                <v-btn
-                                    v-if="!fileUploaded"
-                                    small
-                                    class="ml-0 mt-0"
-                                    color="success"
-                                    :loading="uploading"
-                                    @click="pickFile()"
-                                    >Upload Attachment</v-btn
-                                >
-
-                                <div
-                                    style="border: 1px solid #4caf50; border-radius: 5px;"
-                                    class="pa-2 my-3"
-                                    v-if="fileUploadName.length"
+                                <v-card
+                                    v-for="(file, index) in fileUploadList"
+                                    style="border: 1px solid #4caf50; border-radius: 5px; margin-right: 10px;"
+                                    class="pa-2 my-2"
                                 >
                                     <v-layout
                                         row
                                         justify-space-between
-                                        style="width: 350px;"
+                                        style="width: 250px;"
                                     >
                                         <div class="mt-0 ml-0 pt-1">
-                                            {{
-                                                truncateText(fileUploadName, 27)
-                                            }}
+                                            {{ truncateText(file.name, 18) }}
                                         </div>
                                         <v-btn
                                             color="success"
                                             class="my-0 mr-1"
                                             small
-                                            @click="removeUploadImg()"
+                                            @click="removeUploadImg(index)"
                                         >
                                             remove
                                         </v-btn>
                                     </v-layout>
-                                </div>
+                                </v-card>
                             </v-layout>
                         </v-container>
                     </v-form>
@@ -122,10 +125,10 @@
                         <v-spacer></v-spacer>
                         <v-btn
                             color="default"
-                            @click="cencelNewTicket"
-                            :dark="!cencelBtnAbility"
-                            :disabled="cencelBtnAbility"
-                            >Cencel</v-btn
+                            @click="cancelNewTicket"
+                            :dark="!cancelBtnAbility"
+                            :disabled="cancelBtnAbility"
+                            >Cancel</v-btn
                         >
                         <v-btn
                             :loading="processing"
@@ -138,6 +141,7 @@
                         >
                         <input
                             type="file"
+                            multiple
                             style="display: none"
                             ref="files"
                             @change="onFilePicked($event)"
@@ -155,7 +159,7 @@ import { formatCurrency } from "../../utils/helpers.js";
 import { truncate } from "../../utils/helpers.js";
 export default {
     data: () => ({
-        cencelBtnAbility: false,
+        cancelBtnAbility: false,
         sendBtnDisability: false,
         title: "Help Desk Requests",
         url: "",
@@ -163,15 +167,13 @@ export default {
         newTicketDialog: false,
         processing: false,
         uploading: false,
-        fileUploadId: "",
-        fileUploaded: false,
-        fileUploadName: "",
+        fileUploadList: [],
 
         newTicket: {
             subject: "",
             description: "",
             category: "",
-            priority: "2 Normal",
+            priority: "Normal",
             phone: "",
             room: "",
             ext: "",
@@ -352,12 +354,16 @@ export default {
             this.$refs.form.resetValidation(true);
         },
         async saveNewTicket() {
+            const filesId = [];
+            for (var i = 0; i < this.fileUploadList.length; i++) {
+                filesId.push(this.fileUploadList[i].file_id);
+            }
             if (!this.$refs.form.validate(true)) {
                 return;
             }
             try {
                 this.processing = true;
-                this.cencelBtnAbility = true;
+                this.cancelBtnAbility = true;
                 const hasUserInfo =
                     this.newTicket.phone ||
                     this.newTicket.room.trim() ||
@@ -381,22 +387,28 @@ export default {
                     hasUserInfo ? ` (User Info: ${userInfo})` : ""
                 }`;
 
+                const priorityMap = {
+                    High: "1 High",
+                    Normal: "2 Normal",
+                    Low: "4 Low",
+                };
+
                 const response = await this.$http.post(
                     "api/Manageengine/ManageenginePost",
                     {
                         User: this.$store.state.authentication.user,
                         Subject: this.newTicket.subject.trim(),
                         Description: description,
-                        Priority: this.newTicket.priority,
+                        Priority: priorityMap[this.newTicket.priority],
                         Category: this.newTicket.category
                             ? this.newTicket.category
                             : "User Portal",
-                        Attachments: this.fileUploadId,
+                        Attachments: filesId[0] ? JSON.stringify(filesId) : "",
                     },
                 );
 
                 this.processing = false;
-                this.cencelBtnAbility = false;
+                this.cancelBtnAbility = false;
 
                 this.$notify({
                     text: "Ticket Created",
@@ -408,10 +420,10 @@ export default {
                 this.$refs.grid.reloadGrid();
             } catch (e) {
                 this.processing = false;
-                this.cencelBtnAbility = false;
+                this.cancelBtnAbility = false;
             }
         },
-        cencelNewTicket() {
+        cancelNewTicket() {
             this.reset();
         },
         reset() {
@@ -419,11 +431,11 @@ export default {
             this.newTicket.subject = "";
             this.newTicket.description = "";
             this.newTicket.category = "";
-            this.newTicket.priority = "2 Normal";
+            this.newTicket.priority = "Normal";
             this.newTicket.phone = "";
             this.newTicket.room = "";
             this.newTicket.ext = "";
-            this.removeUploadImg();
+            this.removeAllUploadImg();
         },
         pickFile() {
             this.$refs.files.click();
@@ -432,24 +444,23 @@ export default {
             this.uploading = true;
             this.sendBtnDisability = true;
             const files = e.target.files;
+
             if (!files) return;
-
             try {
-                var formData = new FormData();
-                formData.append("file", files[0]);
-
-                const response = await this.$http.post(
-                    "api/Manageengine/ManageengineUpload",
-                    formData,
-                    {
-                        headers: {
-                            "Content-Type": "multipart/form-data",
+                for (var i = 0; i < files.length; i++) {
+                    var formData = new FormData();
+                    formData.append("file", files[i]);
+                    const response = await this.$http.post(
+                        "api/Manageengine/ManageengineUpload",
+                        formData,
+                        {
+                            headers: {
+                                "Content-Type": "multipart/form-data",
+                            },
                         },
-                    },
-                );
-                this.fileUploadId = response.files[0].file_id;
-                this.fileUploadName = response.files[0].name;
-                this.fileUploaded = true;
+                    );
+                    this.fileUploadList.push(response.files[0]);
+                }
                 this.uploading = false;
                 this.sendBtnDisability = false;
                 this.$refs.files.value = null;
@@ -457,14 +468,16 @@ export default {
                 this.uploading = false;
             }
         },
-        removeUploadImg() {
-            this.fileUploadId = "";
-            this.fileUploaded = false;
-            this.fileUploadName = "";
+        removeUploadImg(index) {
+            this.fileUploadList.splice(index, 1);
+        },
+        removeAllUploadImg() {
+            this.fileUploadList = [];
             this.uploading = false;
             this.sendBtnDisability = false;
             this.$refs.files.value = null;
         },
+
         truncateText(text, count = 25) {
             return truncate(text, count);
         },
