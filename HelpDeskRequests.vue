@@ -73,16 +73,17 @@
                                         label="Phone Number"
                                     ></v-text-field>
                                 </v-flex>
-                                <v-flex xs18 sm3>
-                                    <v-text-field
-                                        v-model="newTicket.room"
-                                        label="Room Number"
-                                    ></v-text-field>
-                                </v-flex>
+
                                 <v-flex xs18 sm3>
                                     <v-text-field
                                         v-model="newTicket.ext"
                                         label="Ext Number"
+                                    ></v-text-field>
+                                </v-flex>
+                                <v-flex xs18 sm3>
+                                    <v-text-field
+                                        v-model="newTicket.room"
+                                        label="Room Number"
                                     ></v-text-field>
                                 </v-flex>
                                 <v-flex xs18 sm8>

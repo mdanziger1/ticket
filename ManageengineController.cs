@@ -21,6 +21,7 @@ using DevExpress.Pdf.ContentGeneration.Interop;
 using AdminPortal.Models;
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Http;
+using static AdminPortal.Models.ManageengineRequestInfo;
 namespace AdminPortal.Controllers
 {
     [Authorize]
@@ -53,7 +54,7 @@ namespace AdminPortal.Controllers
         {
             var tokenData = azurePayments.Tokens.First(t => t.Source == "Manageengine");
             var token = tokenData.Token1;
-            
+
             if (tokenData.ExpirationTime < DateTime.Now)
             {
                 token = await RefreshToken();
@@ -64,6 +65,7 @@ namespace AdminPortal.Controllers
 
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.manageengine.sdp.v3+json"));
             client.DefaultRequestHeaders.Add("Authorization", "Zoho-Oauthtoken " + token);
+
 
             var requestObject = new
             {
@@ -115,7 +117,8 @@ namespace AdminPortal.Controllers
         [HttpPost]
         [AllowAnonymous]
         public async Task<ActionResult> ManageengineUpload([FromForm] IFormFile file)
-        {    
+        {
+
             if (file == null || file.Length == 0)
             {
                 return BadRequest("No file uploaded.");
@@ -198,7 +201,6 @@ namespace AdminPortal.Controllers
             request.AddHeader("Content-Type", "application/x-www-form-urlencoded");
 
             var response = client.Execute<ManageengineRequestInfo>(request);
-
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
                 var authParam = request.Parameters.Find(p => p.Name == "Authorization");
@@ -212,22 +214,29 @@ namespace AdminPortal.Controllers
                 response = client.Execute<ManageengineRequestInfo>(request);
             }
 
-            if (!response.IsSuccessful || response.ErrorException != null)
+            if (response.StatusCode != HttpStatusCode.NotFound && (!response.IsSuccessful || response.ErrorException != null))
             {
                 throw new Exception(response.ErrorMessage);
             }
 
+
             var manageengineRequest = response.Data;
+
+            HandleDeletedTicket(azurePayments, id, response);
+
 
             var existing = azurePayments.ManageengineRequests.FirstOrDefault(x => x.ManageengineID == manageengineRequest.request.id);
 
-            existing.CategoryID = manageengineRequest.request.category?.id;
+            existing.Subject = manageengineRequest.request.subject;
+            existing.TechnicianEmail = manageengineRequest.request.technician?.email_id;
+            existing.TechnicianName = manageengineRequest.request.technician?.name;
+            existing.StatusName = manageengineRequest.request.status?.name;
             existing.CategoryName = manageengineRequest.request.category?.name;
-            existing.CompletedTime = manageengineRequest.request.completed_time != null ? Convert.ToDateTime(manageengineRequest.request.completed_time.display_value) : (DateTime?)null;
+            existing.LastUpdatedTime = manageengineRequest.request.last_updated_time.display_value;
             existing.Description = manageengineRequest.request.description;
-            existing.Attachments = string.Join(",", manageengineRequest.request.attachments
-                .Select(attachment => "https://utaw.sdpondemand.manageengine.com/app/itdesk/api/v3" + attachment.content_url)
-                .ToList());
+            existing.Attachments = JsonConvert.SerializeObject(manageengineRequest.request.attachments.Select(attachment => new
+            { content_url = attachment.content_url, name = attachment.name, }).ToList());
+            existing.CompletedTime = manageengineRequest.request.completed_time != null ? Convert.ToDateTime(manageengineRequest.request.completed_time.display_value) : (DateTime?)null;
 
             azurePayments.SaveChanges("SYSTEM");
 
@@ -446,6 +455,26 @@ namespace AdminPortal.Controllers
             azurePayments.SaveChanges(user);
         }
 
+        private void HandleDeletedTicket(AzurePayments azurePayments, string id, IRestResponse<ManageengineRequestInfo> response)
+        {
+            var manageengineRequest = response.Data;
+
+            bool shouldDelete = manageengineRequest.request?.deleted_time != null
+                                || response.StatusCode == HttpStatusCode.NotFound;
+
+            if (shouldDelete)
+            {
+                var deleteTicket = azurePayments.ManageengineRequests.FirstOrDefault(x => x.ManageengineID == id);
+                if (deleteTicket?.StatusName == "Open")
+                {
+                    azurePayments.ManageengineRequests.Remove(deleteTicket);
+                    azurePayments.SaveChanges("SYSTEM");
+                }
+                throw new InvalidOperationException($"ManageEngine error for ticket {id} with status code {response.StatusCode}: {response.ErrorMessage ?? "Unknown error"}");
+            }
+        }
+
+
         private async Task<string> RefreshToken()
         {
             var client_ID = configuration["Zoho:Client_ID"];
@@ -469,14 +498,14 @@ namespace AdminPortal.Controllers
             var tokenData = JsonConvert.DeserializeObject<RefreshTokenResponse>(tokenResponse);
 
             var token = azurePayments.Tokens.First(t => t.Source == "Manageengine");
-
+            ;
             token.Token1 = tokenData.access_token;
             token.ExpirationTime = DateTime.Now.AddMinutes(59);
             token.LastUpdated = DateTime.Now;
 
             azurePayments.SaveChanges(HttpContext);
 
-            return tokenData.access_token;
+            return tokenData.access_token; ;
         }
     }
 
@@ -517,6 +546,7 @@ namespace AdminPortal.Controllers
         public string sort_order { get; set; }
         public int row_count { get; set; }
     }
+
 
     public class Request
     {
