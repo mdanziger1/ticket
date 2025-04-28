@@ -363,6 +363,12 @@ namespace AdminPortal.Controllers
                             existing.StatusColor = manageengineRequest.status?.color;
                             existing.StatusName = manageengineRequest.status?.name;
                             existing.StatusID = manageengineRequest.status?.id;
+                            existing.LastUpdatedTime = manageengineRequest.last_updated_time?.display_value;
+                            existing.CategoryName = manageengineRequest.category?.name;
+                            existing.Description = manageengineRequest.description;
+                            existing.Attachments = JsonConvert.SerializeObject(manageengineRequest.attachments?.Select(attachment => new
+                            { content_url = attachment.content_url, name = attachment.name, }).ToList());
+
 
                             azurePayments.SaveChanges("SYSTEM");
 
@@ -450,12 +456,17 @@ namespace AdminPortal.Controllers
                 StatusColor = manageengineRequest.status?.color,
                 StatusName = manageengineRequest.status?.name,
                 StatusID = manageengineRequest.status?.id,
+                LastUpdatedTime = manageengineRequest.last_updated_time?.display_value,
+                CategoryName = manageengineRequest.category?.name,
+                Description = manageengineRequest.description,
+                Attachments = JsonConvert.SerializeObject(manageengineRequest.attachments.Select(attachment => new
+                { content_url = attachment.content_url, name = attachment.name, }).ToList()),
             });
 
             azurePayments.SaveChanges(user);
         }
 
-        private void HandleDeletedTicket(AzurePayments azurePayments, string id, IRestResponse<ManageengineRequestInfo> response)
+        private void HandleDeletedTicket(AzurePayments azurePayments, string manageengineId, IRestResponse<ManageengineRequestInfo> response)
         {
             var manageengineRequest = response.Data;
 
@@ -464,13 +475,13 @@ namespace AdminPortal.Controllers
 
             if (shouldDelete)
             {
-                var deleteTicket = azurePayments.ManageengineRequests.FirstOrDefault(x => x.ManageengineID == id);
+                var deleteTicket = azurePayments.ManageengineRequests.FirstOrDefault(x => x.ManageengineID == manageengineId);
                 if (deleteTicket?.StatusName == "Open")
                 {
                     azurePayments.ManageengineRequests.Remove(deleteTicket);
                     azurePayments.SaveChanges("SYSTEM");
                 }
-                throw new InvalidOperationException($"ManageEngine error for ticket {id} with status code {response.StatusCode}: {response.ErrorMessage ?? "Unknown error"}");
+                throw new InvalidOperationException($"ManageEngine error for ticket {manageengineId} with status code {response.StatusCode}: {response.ErrorMessage ?? "Unknown error"}");
             }
         }
 
@@ -524,6 +535,12 @@ namespace AdminPortal.Controllers
         public string value { get; set; }
     }
 
+    public class LastUpdatedTime
+    {
+        public string display_value { get; set; }
+        public string value { get; set; }
+    }
+
     public class Department
     {
         public Site site { get; set; }
@@ -566,6 +583,11 @@ namespace AdminPortal.Controllers
         public string id { get; set; }
         public object maintenance { get; set; }
         public Status status { get; set; }
+        public LastUpdatedTime last_updated_time { get; set; }
+        public Category category { get; set; }
+        public string description { get; set; }
+        public List<Attachments> attachments { get; set; }
+
     }
 
     public class Requester
@@ -666,5 +688,16 @@ namespace AdminPortal.Controllers
     {
         public Request request { get; set; }
         public ResponseStatus response_status { get; set; }
+    }
+
+    public class Category
+    {
+        public string name { get; set; }  
+    }
+
+    public class Attachments
+    {
+        public string name { get; set; }
+        public string content_url { get; set; }
     }
 }
