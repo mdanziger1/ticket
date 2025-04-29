@@ -22,6 +22,7 @@ using AdminPortal.Models;
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Http;
 using static AdminPortal.Models.ManageengineRequestInfo;
+using System.Reactive;
 namespace AdminPortal.Controllers
 {
     [Authorize]
@@ -301,6 +302,36 @@ namespace AdminPortal.Controllers
 
                 foreach (var conversation in conversationsData.conversations)
                 {
+  
+                    var urlN = $"https://utaw.sdpondemand.manageengine.com/api/v3/requests/{manageengineID}/notifications/{conversation.id}";
+                    var requestN = new RestRequest(urlN);
+                    requestN.Method = Method.GET;
+                    requestN.AddHeader("Accept", "application/vnd.manageengine.sdp.v3+json");
+                    requestN.AddHeader("Authorization", $"Zoho-oauthtoken {token}");
+
+                    var responseN = client.Execute<NotificationResponse>(requestN);
+
+                    if (responseN.StatusCode == HttpStatusCode.Unauthorized)
+                    {
+                        var authParam = requestN.Parameters.Find(p => p.Name == "Authorization");
+
+                        requestN.Parameters.Remove(authParam);
+
+                        token = await RefreshToken();
+
+                        requestN.AddHeader("Authorization", "Zoho-Oauthtoken " + token);
+
+                        responseN = client.Execute<NotificationResponse>(requestN);
+                    }
+
+                    if (!responseN.IsSuccessful || responseN.ErrorException != null)
+                    {
+                        throw new Exception($"Error fetching conversations: {responseN.StatusCode} - {responseN.ErrorMessage ?? responseN.Content}");
+                    }
+                    var notificationData = responseN.Data;
+
+                    Console.WriteLine(notificationData.notification.id);
+
                     var existing = azurePayments.ManageengineConversations.FirstOrDefault(m => m.ConversationsID == conversation.id);
 
                     if (existing != null)
@@ -827,4 +858,69 @@ namespace AdminPortal.Controllers
         public CreatedBy created_by { get; set; }
     }
 
+    public class NotificationResponse
+    {
+        public Notification notification { get; set; }
+        public ResponseStatus response_status { get; set; }
+    }
+
+    public class Notification
+    {
+        public NotificationRequest request { get; set; }
+        public List<object> attachments { get; set; }
+        public bool has_attachments { get; set; }
+        public string subject { get; set; }
+        public string description { get; set; }
+        public string messageid { get; set; }
+        public string type { get; set; }
+        public object recipent { get; set; }
+        public Sender sender { get; set; }
+        public bool is_public { get; set; }
+        public string id { get; set; }
+        public TimeInfo time { get; set; }
+        public List<string> to { get; set; }
+    }
+
+    public class NotificationRequest
+    {
+        public DisplayKey display_key { get; set; }
+        public bool is_service_request { get; set; }
+        public string display_id { get; set; }
+        public string subject { get; set; }
+        public string id { get; set; }
+    }
+
+    public class DisplayKey
+    {
+        public string display_value { get; set; }
+        public string value { get; set; }
+    }
+
+    public class Sender
+    {
+        public string email_id { get; set; }
+        public bool is_technician { get; set; }
+        public string sms_mail { get; set; }
+        public string mobile { get; set; }
+        public string last_name { get; set; }
+        public string user_scope { get; set; }
+        public string sms_mail_id { get; set; }
+        public object cost_per_hour { get; set; }
+        public object site { get; set; }
+        public string phone { get; set; }
+        public string employee_id { get; set; }
+        public string name { get; set; }
+        public string id { get; set; }
+        public string photo_url { get; set; }
+        public bool is_vip_user { get; set; }
+        public object department { get; set; }
+        public string first_name { get; set; }
+        public string job_title { get; set; }
+    }
+
+    public class TimeInfo
+    {
+        public string display_value { get; set; }
+        public string value { get; set; }
+    }
 }
