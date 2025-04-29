@@ -302,7 +302,13 @@ namespace AdminPortal.Controllers
 
                 foreach (var conversation in conversationsData.conversations)
                 {
-  
+                    var existing = azurePayments.ManageengineConversations.FirstOrDefault(m => m.ConversationsID == conversation.id);
+
+                    if (existing != null)
+                    {
+                        continue;
+                    }
+
                     var urlN = $"https://utaw.sdpondemand.manageengine.com/api/v3/requests/{manageengineID}/notifications/{conversation.id}";
                     var requestN = new RestRequest(urlN);
                     requestN.Method = Method.GET;
@@ -330,15 +336,7 @@ namespace AdminPortal.Controllers
                     }
                     var notificationData = responseN.Data;
 
-                    Console.WriteLine(notificationData.notification.id);
-
-                    var existing = azurePayments.ManageengineConversations.FirstOrDefault(m => m.ConversationsID == conversation.id);
-
-                    if (existing != null)
-                    {
-                        continue;
-                    }
-                    SaveNewConversation(userPortalRequestsID, displayID, manageengineID, conversation);
+                    SaveNewConversation(userPortalRequestsID, displayID, manageengineID, conversation, notificationData);
                 }
             }
             catch (Exception ex)
@@ -604,8 +602,9 @@ namespace AdminPortal.Controllers
         }
 
 
-        private void SaveNewConversation(int userPortalRequestsID, string displayID, string manageengineID, Conversation conversation)
+        private void SaveNewConversation(int userPortalRequestsID, string displayID, string manageengineID, Conversation conversation, NotificationResponse notification)
         {
+            Console.WriteLine(notification.notification.id);
             azurePayments.ManageengineConversations.Add(new ManageengineConversation
             {
                 UserPortalRequestsID = userPortalRequestsID,
@@ -619,6 +618,8 @@ namespace AdminPortal.Controllers
                 Type = conversation.type,
                 TimeDisplayValue = conversation.created_time.display_value,
                 TimeValue = conversation.created_time.value,
+                Subject = notification.notification.subject,
+                Description = notification.notification.description,
             });
 
             azurePayments.SaveChanges("SYSTEM");
