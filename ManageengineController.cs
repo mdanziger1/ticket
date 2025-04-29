@@ -222,6 +222,7 @@ namespace AdminPortal.Controllers
 
             var manageengineRequest = response.Data;
 
+
             HandleDeletedTicket(azurePayments, id, response);
 
 
@@ -237,11 +238,89 @@ namespace AdminPortal.Controllers
             existing.Attachments = JsonConvert.SerializeObject(manageengineRequest.request.attachments.Select(attachment => new
             { content_url = attachment.content_url, name = attachment.name, }).ToList());
             existing.CompletedTime = manageengineRequest.request.completed_time != null ? Convert.ToDateTime(manageengineRequest.request.completed_time.display_value) : (DateTime?)null;
-
+            existing.NotificationStatus = manageengineRequest.request?.notification_status;
             azurePayments.SaveChanges("SYSTEM");
+
+            if (existing.NotificationStatus != null)
+            {
+                try
+                {
+                    await UpdateConversations(existing.ID, existing.DisplayID, existing.ManageengineID);
+                }
+                catch (Exception ex)
+                {
+                }
+
+            }
 
             return Ok();
         }
+
+        [AllowAnonymous]
+        [HttpGet]
+        public async Task<IActionResult> UpdateConversations(int userPortalRequestsID, string displayID, string manageengineID)
+        {
+            try
+            {
+                var tokenData = azurePayments.Tokens.First(t => t.Source == "Manageengine");
+                var token = tokenData.Token1;
+
+                if (tokenData.ExpirationTime < DateTime.Now)
+                {
+                    token = await RefreshToken();
+                }
+
+                var client = new RestClient();
+                var url = $"https://utaw.sdpondemand.manageengine.com/api/v3/requests/{manageengineID}/conversations";
+
+                var request = new RestRequest(url);
+                request.Method = Method.GET;
+                request.AddHeader("Accept", "application/vnd.manageengine.sdp.v3+json");
+                request.AddHeader("Authorization", $"Zoho-oauthtoken {token}");
+
+                var response = client.Execute<ManageengineConversationsResponse>(request);
+                if (response.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    var authParam = request.Parameters.Find(p => p.Name == "Authorization");
+
+                    request.Parameters.Remove(authParam);
+
+                    token = await RefreshToken();
+
+                    request.AddHeader("Authorization", "Zoho-Oauthtoken " + token);
+
+                    response = client.Execute<ManageengineConversationsResponse>(request);
+                }
+
+                if (!response.IsSuccessful || response.ErrorException != null)
+                {
+                    throw new Exception($"Error fetching conversations: {response.StatusCode} - {response.ErrorMessage ?? response.Content}");
+                }
+
+                var conversationsData = response.Data;
+
+                foreach (var conversation in conversationsData.conversations)
+                {
+                    var existing = azurePayments.ManageengineConversations.FirstOrDefault(m => m.ConversationsID == conversation.id);
+
+                    if (existing != null)
+                    {
+                        continue;
+                    }
+                    SaveNewConversation(userPortalRequestsID, displayID, manageengineID, conversation);
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+
+            return Ok();
+        }
+
+
+
+
 
         [AllowAnonymous]
         [HttpPost]
@@ -300,7 +379,14 @@ namespace AdminPortal.Controllers
 
                     foreach (var manageengineRequest in response.Data.requests)
                     {
+
                         var existing = azurePayments.ManageengineRequests.FirstOrDefault(m => m.ManageengineID == manageengineRequest.id);
+
+                        // HandleDeletedTicket(azurePayments, existing.ManageengineID, response);
+
+                        //Console.WriteLine(existing.ManageengineID);
+                        //Console.WriteLine(response.Data);
+                        //Console.WriteLine(response.StatusCode);
 
                         if (existing != null)
                         {
@@ -368,7 +454,7 @@ namespace AdminPortal.Controllers
                             existing.Description = manageengineRequest.description;
                             existing.Attachments = JsonConvert.SerializeObject(manageengineRequest.attachments?.Select(attachment => new
                             { content_url = attachment.content_url, name = attachment.name, }).ToList());
-
+                            existing.NotificationStatus = manageengineRequest.notification_status;
 
                             azurePayments.SaveChanges("SYSTEM");
 
@@ -461,6 +547,7 @@ namespace AdminPortal.Controllers
                 Description = manageengineRequest.description,
                 Attachments = JsonConvert.SerializeObject(manageengineRequest.attachments.Select(attachment => new
                 { content_url = attachment.content_url, name = attachment.name, }).ToList()),
+                NotificationStatus = manageengineRequest.notification_status,
             });
 
             azurePayments.SaveChanges(user);
@@ -483,6 +570,27 @@ namespace AdminPortal.Controllers
                 }
                 throw new InvalidOperationException($"ManageEngine error for ticket {manageengineId} with status code {response.StatusCode}: {response.ErrorMessage ?? "Unknown error"}");
             }
+        }
+
+
+        private void SaveNewConversation(int userPortalRequestsID, string displayID, string manageengineID, Conversation conversation)
+        {
+            azurePayments.ManageengineConversations.Add(new ManageengineConversation
+            {
+                UserPortalRequestsID = userPortalRequestsID,
+                DisplayID = displayID,
+                ManageengineID = manageengineID,
+                ConversationsID = conversation.id,
+                IsTechnician = conversation.created_by.is_technician,
+                SenderEmail = conversation.created_by.email_id,
+                SenderName = conversation.created_by.name,
+                ShowToRequester = conversation.show_to_requester,
+                Type = conversation.type,
+                TimeDisplayValue = conversation.created_time.display_value,
+                TimeValue = conversation.created_time.value,
+            });
+
+            azurePayments.SaveChanges("SYSTEM");
         }
 
 
@@ -587,6 +695,7 @@ namespace AdminPortal.Controllers
         public Category category { get; set; }
         public string description { get; set; }
         public List<Attachments> attachments { get; set; }
+        public string notification_status { get; set; }
 
     }
 
@@ -700,4 +809,22 @@ namespace AdminPortal.Controllers
         public string name { get; set; }
         public string content_url { get; set; }
     }
+
+    public class ManageengineConversationsResponse
+    {
+        public List<ResponseStatus> response_status { get; set; }
+        public ListInfo list_info { get; set; }
+        public List<Conversation> conversations { get; set; }
+    }
+
+    public class Conversation
+    {
+        public CreatedTime created_time { get; set; }
+        public int number_of_attachments { get; set; }
+        public bool show_to_requester { get; set; }
+        public string id { get; set; }
+        public string type { get; set; }
+        public CreatedBy created_by { get; set; }
+    }
+
 }
