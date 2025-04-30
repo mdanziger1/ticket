@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -23,7 +24,7 @@ namespace UTA.API.DAL.Models
         public bool IsTechnician { get; set; }
 
         [MaxLength(255)]
-        public object SenderEmail { get; set; }
+        public string SenderEmail { get; set; }
 
         [MaxLength(255)]
         public string SenderName { get; set; }
@@ -38,5 +39,10 @@ namespace UTA.API.DAL.Models
 
         [MaxLength(100)]
         public string TimeValue { get; set; }
+        public string Subject { get; set; }
+        public string Description { get; set; }
+        public bool HasAttachments { get; set; }
+        public string Attachments { get; set; }
+        public string ToEmail { get; set; }
     }
 }
