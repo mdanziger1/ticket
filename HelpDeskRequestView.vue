@@ -156,7 +156,7 @@
                             <v-btn
                                 class="mt-2 ml-1 px-3"
                                 @click="
-                                    downloadAttachment(
+                                    loadFile(
                                         `https://utaw.sdpondemand.manageengine.com/app/itdesk/api/v3${
                                             attachment.content_url
                                         }`,
@@ -180,6 +180,7 @@ import {
     formatPhoneNumber,
     truncate,
     pluralize,
+    getDomain,
 } from "../../utils/helpers.js";
 import moment from "moment";
 
@@ -213,20 +214,20 @@ export default {
         },
         async loadRequest() {
             const response = await this.$http.get(
-                `api/manageengine/getbyID?id=` + this.$route.params.id,
+                `api/manageengine/getRequestbyID?id=` + this.$route.params.id,
             );
 
-            console.log(this.$route);
             response.description = response.description
                 ? response.description.replaceAll(
                       "/app/itdesk/servlet/",
                       "https://utaw.sdpondemand.manageengine.com/app/itdesk/servlet/",
                   )
                 : response.description;
-            console.log(response);
+
             this.request = response;
             this.loading = false;
         },
+
         formatPhoneNumber(number) {
             return formatPhoneNumber(number);
         },
@@ -280,6 +281,15 @@ export default {
         },
         truncateText(attachment) {
             return truncate(attachment, 50);
+        },
+        loadFile(file) {
+            const url =
+                getDomain() +
+                `/api/manageengine/GetAttachments?URLFile=${encodeURIComponent(
+                    file,
+                )}`;
+            console.log(url);
+            window.open(url, "_blank");
         },
     },
 };
